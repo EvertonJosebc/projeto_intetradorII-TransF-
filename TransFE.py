@@ -11,9 +11,8 @@ from sqlite3 import Error
 import requests
 import random
 import string
+import db
 app = Flask(__name__)
-
-#funções para abrir e fechar o banco
 
 DB_URL = "database1.db"
 @app.before_request
@@ -28,6 +27,7 @@ def after_request(exception):
         g.conn.close()
         print('conexão fechada')
 
+
 @app.route('/')
 def index():
     return "<h1>Start Home</h1>"
@@ -40,29 +40,20 @@ size = 10
 def cod_generator(size=35, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
-#MÉTODO PARA EXECUTAR COMMITS NO BANCO
-
-def commitdb(query):
-    cursor = g.conn.cursor()
-    cursor.execute(query)
-    g.conn.commit()
 
 
-#MÉTODOS PARA PESQUISAR NO BANCO
-
-def search(table,column, value):
-    query = """
-    SELECT * FROM {} WHERE {} = {};
-    """.format(table,column,value)
-    cursor = g.conn.execute(query)
-    return cursor
 
 
-#MÉTODOS DE DELIVERY
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+            #MÉTODOS DE DELIVERY
 
 @app.route('/delivery/store/<int:id>', methods=['GET'])
 def getDeliveryStore(id):
-    delivery = search("delivery","id_store",id)
+    delivery = db.search("delivery","id_store",id)
 
     result_delivery = [dict((delivery.description[i][0], value) \
        for i, value in enumerate(row)) for row in delivery.fetchall()]
@@ -72,7 +63,7 @@ def getDeliveryStore(id):
 
 @app.route('/delivery/client/<int:id>', methods=['GET'])
 def getDeliveryClient(id):
-    delivery = search("delivery","id_client",id)
+    delivery = db.search("delivery","id_client",id)
 
     result_delivery = [dict((delivery.description[i][0], value) \
        for i, value in enumerate(row)) for row in delivery.fetchall()]
@@ -83,52 +74,46 @@ def CreatDelivery(id):
     date = datetime.today
     date_delivery = date + timedelta(30)
     status = 0
-    freiht_value = 0
+    shipping= 0
 
-    cursor = search("request","id_store",int(id))
+    cursor = db.search("request","id_store",int(id))
     request = [dict((cursor.description[i][0], value) \
        for i, value in enumerate(row)) for row in cursor.fetchall()]
     response = request[0]
-
-
-        
-
-    query = """
-    INSERT INTO delivery(date,date_deliver,status,freiht_value,id_store,id_request)
-    VALUES({},{},{},{},{});
-    """.format(date,date_delivery,status,freiht_value,response["id_store"],id)
-    commitdb(query)
+    id_store = response["id_store"]
+    db.insertDelivery(date,date_delivery,shipping,status,int(id_store),int(id))
     return {"msg":"Delivery OK !"}, 200
 
 @app.route('/delivery/<int:id>', methods=["PUT"])
 def putDelivery(id):
-    return "put delivery"
+    if request.get_json():
+        status = request["status"]
+        db.updateDelivery(status)
+    return "put delivery",200
 
 @app.route('/delivery/<int:id>', methods=["DELETE"])
 def deleteDelivery(id):
+    db.delete("delivery",int(id))
     return "DELETE delivery"
 
 @app.route('/delivery/<int:id>', methods=["GET"])
 def getidDelivery(id):
-    cursor = search("delivery","id",id)
+    cursor = db.search("delivery","id",id)
 
     delivery = [dict((cursor.description[i][0], value) \
        for i, value in enumerate(row)) for row in cursor.fetchall()]
 
     return {"delivery":delivery}, 200
 
-
-
-
-
-
-#ÁREA DOS MÉTODOS DO CLIENTE
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+            #MÉTODOS DE CLIENTE
 @app.route('/client/store/<int:id>',methods=['GET'])
 def getClient(id):
-    query = """
-    SELECT * FROM client where id_store = {};
-    """.format(id)
-    cursor = g.conn.execute(query)
+    cursor = db.search("client","id_store",id)
     client_dict = [{'name':row[1],'cpf':row[2],'phone':row[3]}
                     for row in cursor.fetchall()]
     return {"client":client_dict}
@@ -138,12 +123,8 @@ def postClient(id):
     if request.get_json:
         client = request.get_json()
         name,cpf,phone = client["name"],client["cpf"],client["phone"]
+        db.insertClient(name,cpf,phone,int(id))
 
-        query = """
-            INSERT INTO client (name,cpf,phone,id_store)
-            VALUES ("{}","{}","{}",{});
-        """.format(name,cpf,phone,int(id))
-        commitdb(query)
         return "Saved successfully !", 201
     return "error: fail to post", 405
 
@@ -152,28 +133,19 @@ def putClient(id):
     if request.get_json:
 
         client = request.get_json()
-        query = f'UPDATE client SET name = "{client["name"]}", cpf = "{client["cpf"]}", phone = "{client["phone"]}" where id = {id}'
-        commitdb(query)
-        
+        db.updateClient(client["name"],client["cpf"],client["phone"],int(id))        
         return "Update client successfully !", 200
     return   "error: fail to update", 405
 
 @app.route('/client/<int:id>',methods=['DELETE'])
 def DELETEClient(id):
-    query = """
-        DELETE FROM client WHERE id={}
-    """.format(id)
-    commitdb(query)
+    db.delete("client","id",int(id))
     return "destroy client successfully", 200
 
 
 @app.route('/client/<int:id>',methods=['GET'])
 def GETIDClient(id):
-    query = """
-            SELECT name,cpf,phone from client
-            where id = {};
-    """.format(id)
-    cursor = g.conn.execute(query)
+    cursor = db.search("client","id",int(id))
 
     client = [dict((cursor.description[i][0], value) \
        for i, value in enumerate(row)) for row in cursor.fetchall()]
@@ -181,25 +153,17 @@ def GETIDClient(id):
     if client:
         return {'client':client}, 200
     return 'error: fail to get',405
-
-
-
-
-
-
-
-
-
-
-#ÁREA DOS MÉTODOS DE ENDEREÇO
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+            #MÉTODOS DE ENDEREÇO
 @app.route('/address/client/<int:id>',methods=['GET'])
 def getAddress(id):
-    query = """
-    SELECT * FROM address WHERE id_client = {};
-    """.format(id)
-    cursor = g.conn.execute(query)
-    address_dict = [{'locality':row[1],'local':row[2],'discrict':row[3],'cep':row[4],'city':row[5],'state':row[6],'number':row[8]}
-                    for row in cursor.fetchall()]
+    cursor = db.search("address","id_client",int(id))
+    address_dict = [dict((cursor.description[i][0], value) \
+       for i, value in enumerate(row)) for row in cursor.fetchall()]
     return {"address":address_dict}
 
 @app.route('/address/client/<int:id>',methods=['POST'])
@@ -211,27 +175,18 @@ def postAddress(id):
         discrict = address["discrict"]
         number = address["number"]
         cep=address["cep"]
-     
         URL = 'https://ws.apicep.com/cep/{}.json'
-
         response = requests.get(URL.format(cep))
         city = "NULL"
         state = "NULL"
-
         if response.status_code == 200:
-
             response_json = response.json()
             city = response_json["city"]
             state = response_json["state"]
-
         else:
             city = "não localizado"
             state = "não localizado"
-        query = """
-            INSERT INTO address (locality,local,discrict,number,id_client,cep,city,state)
-            VALUES ("{}","{}","{}","{}",{},"{}","{}","{}");
-        """.format(locality,local,discrict,number,int(id),cep,city,state)
-        commitdb(query)
+        db.insertAddress(locality,local,discrict,number,int(id),cep,city,state)
         return "Saved successfully !", 201
     return "error: fail to update", 405
 
@@ -239,66 +194,43 @@ def postAddress(id):
 def putaddress(id):
     if request.get_json:
         address = request.get_json()
-        query =  f'UPDATE address SET locality = "{address["locality"]}", local = "{address["local"]}", discrict = "{address["discrict"]}", number = "{address["number"]}",cep = "{address["cep"]}" where id = {id}'
-        commitdb(query)
+        db.updateAddress(address["locality"],address["local"],address["discrict"],address["number"],address["cep"],int(id))
         URL = 'https://ws.apicep.com/cep/{}.json'
-
         response = requests.get(URL.format(address["cep"]))
         city = "NULL"
         state = "NULL"
-
         if response.status_code == 200:
-
             response_json = response.json()
             city = response_json["city"]
             state = response_json["state"]
-
         else:
             city = "não localizado"
             state = "não localizado"
-        query = f'UPDATE address SET city = "{city}", state = "{state}" WHERE id={id}'
-        commitdb(query)
-        
+        db.updateCityState(city,state) 
         return "Update address successfully !", 200
     return   "error: fail to update", 405
 
 @app.route('/address/<int:id>',methods=['DELETE'])
 def DELETEaddress(id):
-    query = """
-        DELETE FROM address WHERE id={};
-    """.format(id)
-    commitdb(query)
+    db.delete("address","id",int(id))
     return "destroy address successfully", 200
 
 @app.route('/address/<int:id>',methods=['GET'])
 def GETidaddress(id):
-        query = """
-            SELECT * from address
-            where id = {};
-        """.format(int(id))
-        cursor = g.conn.execute(query)
-
+        cursor = db.search("address","id",int(id))
         address = [dict((cursor.description[i][0], value) \
        for i, value in enumerate(row)) for row in cursor.fetchall()]
         return {'address':address} , 200
 
-
-
-
-
-
-
-
-
-
-
-#ÁREA DOS MÉTODOS DE PRODUTO
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+            #MÉTODOS DE PRODUTO
 @app.route('/products/store/<int:id>',methods=['GET'])
 def getproducts(id):
-    query = """
-    SELECT * FROM product WHERE id_store = {};
-    """.format(id)
-    cursor = g.conn.execute(query)
+    cursor = db.search("product","id_store",int(id))
     product_dict = [dict((cursor.description[i][0], value) \
        for i, value in enumerate(row)) for row in cursor.fetchall()]
     return {"products":product_dict}, 200
@@ -310,12 +242,7 @@ def postAdress(id):
             name = product["name"]
             unitary_value = product["unitary_value"]
             Weigth = product["weigth"]
-        
-            query = """
-            INSERT INTO product (name,unitary_value,weigth,id_store)
-            VALUES ("{}",{},{},{});
-            """.format(name,unitary_value,Weigth,int(id))
-            commitdb(query)
+            db.insertProduct(name,unitary_value,Weigth,int(id))
             return "Saved successfully !", 201
         return "error: fail to post", 405
 
@@ -323,53 +250,35 @@ def postAdress(id):
 def putproducts(id):
     if request.get_json:
         product  = request.get_json();
-
-        query = f'UPDATE product SET name = "{product["name"]}", unitary_value = {product["unitary_value"]}, weigth = {product["weigth"]} ;'
-        commitdb(query)
-
+        db.updateProduct(product["name"],product["unitary_value"],product["weigth"])
         return "Update product successfully !", 200
     return   "error: fail to update", 405
 
 @app.route('/products/<int:id>',methods=['DELETE'])
 def DELETEproducts(id):
-    query = """
-    DELETE FROM product WHERE id={}
-    """.format(id)
-    commitdb(query)
+    db.delete("product","id",int(id))
     return "destroy product successfully", 200     
     
 
 @app.route('/products/<int:id>',methods=['GET'])
 def GETidproducts(id):
-    query = """
-    SELECT * FROM product WHERE id = {};
-    """.format(int(id))
-    cursor = g.conn.execute(query)
+    cursor = db.search("product","id",int(id))
     product = [dict((cursor.description[i][0], value) \
        for i, value in enumerate(row)) for row in cursor.fetchall()]
     return {"products":product}, 200
 
-
-
-
-
-
-
-
-
-
-
-
-#AREA DE MÉTODOS DE LOJA
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+            #MÉTODOS DE LOJA
 
 @app.route('/store',methods=['GET'])
 def getstore():
-    query = """
-        SELECT * FROM store;
-    """
-    cursor = g.conn.execute(query)
-    store_dict = [{'cnpj':row[1],'name':row[2],'email':row[3]}
-                    for row in cursor.fetchall()]
+    cursor = db.storeAll()
+    store_dict = [dict((cursor.description[i][0], value) \
+       for i, value in enumerate(row)) for row in cursor.fetchall()]
     return {"store":store_dict}
 
 @app.route('/store',methods=['POST'])
@@ -379,12 +288,7 @@ def poststore():
         name = store["name"]
         cnpj = store["cnpj"]
         email = store["email"]
-
-        query = """
-            INSERT INTO store (name,cnpj,email)
-            VALUES ("{}","{}","{}");
-        """.format(name,cnpj,email)
-        commitdb(query)
+        db.insertStore(name,cnpj,email)
         return "Saved successfully !", 201
     return {"error: fail to save"}, 405
 
@@ -392,47 +296,34 @@ def poststore():
 def putstore(id):
     if request.get_json:
         store = request.get_json()
-        query = f'UPDATE store SET name = "{store["name"]}", cnpj = "{store["cnpj"]}", email = "{store["email"]}" where id = {id}'
-        commitdb(query)
+        db.updateStore(store["name"],store["cnpj"],store["email"], int(id))
         return "Update Store successfull", 200
     return   "error: fail to update", 405
 
 @app.route('/store/<int:id>',methods=['DELETE'])
 def DELETEstore(id):
-    query = """
-    DELETE FROM store WHERE id={}
-    """.format(int(id))
-    commitdb(query)
+    db.delete("store","id",int(id))
     return "destroy store successfully", 200
 
 @app.route('/store/<int:id>',methods=['GET'])
 def GETidstore(id):
-    query = """
-            SELECT name,cnpj,email from store
-            where id = {};
-    """.format(id)
-    cursor = g.conn.execute(query)
-
+    cursor = db.search("store","id",int(id))
     store = [dict((cursor.description[i][0], value) \
        for i, value in enumerate(row)) for row in cursor.fetchall()]
 
     return {'store':store}, 200
     
 
-
-
-
-
-
-
-
-
-
-#ÁREA DOS MÉTODOS DE RASTREIO
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+            #MÉTODOS DE RASTREIO
 
 @app.route('/tracking/request/<int:id>',methods=['GET'])
 def gettracking(id):
-    result = search("tracking","id_request",id)
+    result = db.search("tracking","id_request",id)
     tracking = [dict((result.description[i][0], value) \
        for i, value in enumerate(row)) for row in result.fetchall()]
     return {"tracking":tracking}
@@ -440,12 +331,8 @@ def gettracking(id):
 @app.route('/tracking/request/<int:id>',methods=['POST'])
 def posttracking(id):
     cod = cod_generator(size,base_cod)
-    query = """
-        INSERT INTO tracking (cod,id_request)
-        VALUES ('{}',{})
-    """.format(cod,int(id))
-
-    return "POST tracking"
+    db.insertTracking(cod,int(id))
+    return "POST tracking", 200
 
 @app.route('/tracking/<int:id>',methods=['PUT'])
 def puttracking(id):
@@ -453,72 +340,61 @@ def puttracking(id):
 
 @app.route('/tracking/<int:id>',methods=['DELETE'])
 def DELETEtracking(id):
+    db.delete("tracking","id",int(id))
     return "DELETEtracking"
 
 @app.route('/tracking/<int:id>',methods=['GET'])
 def GETidtracking(id):
-    result = search("tracking","id",id)
-    tracking = [dict((result.description[i][0], value) \
-       for i, value in enumerate(row)) for row in result.fetchall()]
+    cursor = db.search("tracking","id",id)
+    tracking = [dict((cursor.description[i][0], value) \
+       for i, value in enumerate(row)) for row in cursor.fetchall()]
     return {"tracking":tracking}
 
-
-
-
-
-
-
-
-
-
-#MÉTODOS DE PEDIDO
-
-
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+            #MÉTODOS DE PEDIDO
 
 @app.route("/request/client/<int:id>", methods =["GET"])
 def GetRequest(id):
-    result = search("request","id_client",id)
-    request_client = [dict((result.description[i][0], value) \
-       for i, value in enumerate(row)) for row in result.fetchall()]
+    cursor = db.search("request","id_client",id)
+    request_client = [dict((cursor.description[i][0], value) \
+       for i, value in enumerate(row)) for row in cursor.fetchall()]
     return {"request":request_client}, 200
 
 
 @app.route("/request/client/<int:id>", methods=["POST"])
 def PostRequest(id):
-    client = search("client","id",int(id))
+    client = db.search("client","id",int(id))
     request_client = [dict((client.description[i][0], value) \
        for i, value in enumerate(row)) for row in client.fetchall()]
     client = request_client[0]
     id_store = client["id_store"]
-    query = """
-        INSERT INTO request (id_client,id_store)
-        VALUES ({},{});
-    """.format(int(id),int(id_store))
-    commitdb(query)
+    db.insertRequest(int(id),int(id_store))
     return "Salve ok!", 200
-    
-    
-    
+     
 @app.route("/request/<int:id>", methods=["GET"])
 def  GetResquetID(id):
-        search_request = search("request","id",id)
+        cursor = db.search("request","id",id)
         search = [{'id':row[0],'cod':row[1],'id_client':row[2],'id_delivery':row[3],'id_store':row[4]}
-                    for row in search_request.fetchall()]
+                    for row in cursor.fetchall()]
         return {"request":search}, 200
 
 
-#MÉTODO PARA PARA A TABELA request_products
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+#------------------------------------------------------
+            #MÉTODOS DE PEDIDO_PRODUTO
 
 @app.route("/request/products/<int:id_request>/<int:id_product>", methods=["POST"])
 def request_product(id_request, id_product):
     if request.get_json:
         quantity = request.get_json()
-
-        query = """
-        INSERT INTO request_product (id_request,id_procduct,quantity)
-        VALUES ({},{},{});
-        """.format(id_request,id_product,quantity["quantity"])
-        commitdb(query)
+        db.insertRequest_Product(int(id_request),int(id_product),quantity["quantity"])
         return "Salve ok!", 200
     return "fail!",405
 
