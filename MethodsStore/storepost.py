@@ -1,10 +1,8 @@
 import requests
 
-URL = "http://192.168.0.102:8090/store"
+URL = "http://127.0.0.1:8090/store"
 
-todo = {"name":"Lojão do Bras","cnpj":"4939933004-001","email":"lojaodobras@gmmail.com"}
-
-
+todo = {"name":"new Store","cnpj":"4939933004-654","email":"newstore@gmmail.com"}
 
 response = requests.post(URL, json=todo)
 print(response.status_code)
