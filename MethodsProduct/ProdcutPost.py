@@ -1,8 +1,8 @@
 import requests
 
-URL = "http://10.112.4.118:8090/products/store/1"
+URL = "http://127.0.0.1:8090/products/store/1"
 
-todo = {"name":"Armario de parede de aço","unitary_value":1200.56,"weigth":300}
+todo = {"name":"Carrinho de Brinquedo","unitary_value":60.76,"weigth":0.950}
 
 response = requests.post(URL, json = todo)
 
