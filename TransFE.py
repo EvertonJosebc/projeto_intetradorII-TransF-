@@ -87,7 +87,7 @@ def CreatDelivery(id):
         response = value[0]
         id_store = response["id_store"]
         db.insertDelivery(date,date_delivery,status,id_store,shipping,id)
-        return {"msg":"Delivery OK !"}, 200
+        return {"msg":"Delivery OK !"}, 201
     return {"error":"Not Json"}
 
 @app.route('/delivery/<int:id>', methods=["PUT"])
@@ -120,8 +120,9 @@ def getidDelivery(id):
 @app.route('/client/store/<int:id>',methods=['GET'])
 def getClient(id):
     cursor = db.searchid("client","id_store",id)
-    client_dict = [{'name':row[1],'cpf':row[2],'phone':row[3]}
-                    for row in cursor.fetchall()]
+    client_dict = [dict((cursor.description[i][0], value) \
+       for i, value in enumerate(row)) for row in cursor.fetchall()]
+
     return {"clients":client_dict},200
 
 @app.route('/client/store/<int:id>',methods=['POST'])
@@ -328,9 +329,11 @@ def searchName():
             if cursor:
                 store = [dict((cursor.description[i][0], value) \
                     for i, value in enumerate(row)) for row in cursor.fetchall()]
-                store_list = store[0]
+            if store[0]:
+                store_list = store[0]    
                 return store_list,200
-            return {"error":"not found"}, 404
+            return {"error", 405}
+        return {"error":"not found"}, 404
 
     
 
@@ -352,7 +355,7 @@ def gettracking(id):
 def posttracking(id):
     cod = cod_generator(size,base_cod)
     db.insertTracking(cod,int(id))
-    return "POST tracking", 200
+    return "POST tracking", 201
 
 @app.route('/tracking/<int:id>',methods=['PUT'])
 def puttracking(id):
