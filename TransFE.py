@@ -13,11 +13,12 @@ import random
 import googlemaps
 import string
 import db
+from flask_cors import CORS
 app = Flask(__name__)
 
 #ABRINDO E FECHANDO O BANCO
 
-
+cors = CORS(app);
 DB_URL = "database1.db"
 @app.before_request
 def before_request():
@@ -318,7 +319,7 @@ def GETidstore(id):
     store = [dict((cursor.description[i][0], value) \
        for i, value in enumerate(row)) for row in cursor.fetchall()]
 
-    return {'store':store}, 200
+    return {'store':store[0]}, 200
 
 @app.route('/store/email', methods=["POST"])
 def searchName():
